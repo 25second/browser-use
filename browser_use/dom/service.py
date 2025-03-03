@@ -1,6 +1,8 @@
+import asyncio
 import gc
 import json
 import logging
+import random
 from dataclasses import dataclass
 from importlib import resources
 from typing import TYPE_CHECKING, Optional
@@ -40,7 +42,10 @@ class DomService:
 		highlight_elements: bool = True,
 		focus_element: int = -1,
 		viewport_expansion: int = 0,
+		add_human_delay: bool = True
 	) -> DOMState:
+		if add_human_delay:
+			await asyncio.sleep(random.uniform(0.05, 0.15))
 		element_tree, selector_map = await self._build_dom_tree(highlight_elements, focus_element, viewport_expansion)
 		return DOMState(element_tree=element_tree, selector_map=selector_map)
 

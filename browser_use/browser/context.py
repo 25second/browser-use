@@ -1141,8 +1141,12 @@ class BrowserContext:
 				raise Exception(f'Element: {repr(element_node)} not found')
 
 			async def perform_click(click_func):
-				"""Performs the actual click, handling both download
-				and navigation scenarios."""
+				"""Performs the actual click with human-like behavior."""
+				page = await self.get_current_page()
+
+				# Add human-like delay before action
+				await asyncio.sleep(random.uniform(0.1, 0.3))
+
 				if self.config.save_downloads_path:
 					try:
 						# Try short-timeout expect_download to detect a file download has been been triggered
