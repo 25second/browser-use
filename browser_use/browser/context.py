@@ -11,6 +11,7 @@ import os
 import re
 import time
 import uuid
+import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional, TypedDict
 
@@ -188,7 +189,7 @@ class BrowserContext:
 				return
 
 			# Then remove CDP protocol listeners
-			if self._page_event_handler and self.session.context:
+			if self._page_event_handler and self.session:
 				try:
 					# This actually sends a CDP command to unsubscribe
 					self.session.context.remove_listener('page', self._page_event_handler)
@@ -674,24 +675,24 @@ class BrowserContext:
 		debug_script = """(() => {
 			function getPageStructure(element = document, depth = 0, maxDepth = 10) {
 				if (depth >= maxDepth) return '';
-				
+
 				const indent = '  '.repeat(depth);
 				let structure = '';
-				
+
 				// Skip certain elements that clutter the output
 				const skipTags = new Set(['script', 'style', 'link', 'meta', 'noscript']);
-				
+
 				// Add current element info if it's not the document
 				if (element !== document) {
 					const tagName = element.tagName.toLowerCase();
-					
+
 					// Skip uninteresting elements
 					if (skipTags.has(tagName)) return '';
-					
+
 					const id = element.id ? `#${element.id}` : '';
 					const classes = element.className && typeof element.className === 'string' ? 
 						`.${element.className.split(' ').filter(c => c).join('.')}` : '';
-					
+
 					// Get additional useful attributes
 					const attrs = [];
 					if (element.getAttribute('role')) attrs.push(`role="${element.getAttribute('role')}"`);
@@ -702,10 +703,10 @@ class BrowserContext:
 						const src = element.getAttribute('src');
 						attrs.push(`src="${src.substring(0, 50)}${src.length > 50 ? '...' : ''}"`);
 					}
-					
+
 					// Add element info
 					structure += `${indent}${tagName}${id}${classes}${attrs.length ? ' [' + attrs.join(', ') + ']' : ''}\\n`;
-					
+
 					// Handle iframes specially
 					if (tagName === 'iframe') {
 						try {
@@ -721,7 +722,7 @@ class BrowserContext:
 						}
 					}
 				}
-				
+
 				// Get all child elements
 				const children = element.children || element.childNodes;
 				for (const child of children) {
@@ -729,10 +730,10 @@ class BrowserContext:
 						structure += getPageStructure(child, depth + 1, maxDepth);
 					}
 				}
-				
+
 				return structure;
 			}
-			
+
 			return getPageStructure();
 		})()"""
 
@@ -1086,12 +1087,37 @@ class BrowserContext:
 			# Get element properties to determine input method
 			is_contenteditable = await element_handle.get_property('isContentEditable')
 
-			# Different handling for contenteditable vs input fields
+			async def human_type(element, text):
+				# Clear existing text
+				await element.evaluate('el => el.textContent = ""')
+
+				for char in text:
+					# Базовая задержка между символами
+					base_delay = random.gauss(100, 20)  # среднее 100мс
+
+					# Увеличиваем задержку для определенных случаев
+					if char in '.,!?':  # Пауза после знаков препинания
+						base_delay *= 1.5
+					elif char.isupper():  # Пауза перед заглавными буквами
+						await asyncio.sleep(0.1)
+
+					# Случайные "человеческие" ошибки
+					if random.random() < 0.02:  # 2% шанс опечатки
+						wrong_char = chr(ord(char) + 1)
+						await element.type(wrong_char, delay=base_delay/1000)
+						await asyncio.sleep(0.2)
+						await element.press('Backspace')
+						await asyncio.sleep(0.1)
+
+					await element.type(char, delay=base_delay/1000)
+
 			if await is_contenteditable.json_value():
-				await element_handle.evaluate('el => el.textContent = ""')
-				await element_handle.type(text, delay=5)
+				await human_type(element_handle, text)
 			else:
+				# Для обычных input полей используем более простой метод
 				await element_handle.fill(text)
+				# Добавляем небольшую задержку после заполнения
+				await asyncio.sleep(random.gauss(0.2, 0.05))
 
 		except Exception as e:
 			logger.debug(f'Failed to input text into element: {repr(element_node)}. Error: {str(e)}')
